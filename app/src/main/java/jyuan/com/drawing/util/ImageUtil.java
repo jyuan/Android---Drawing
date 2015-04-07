@@ -1,6 +1,6 @@
-package jyuan.com.drawing.ColorPicker;
+package jyuan.com.drawing.util;
 
-public class RGBToHex {
+public class ImageUtil {
 
     /**
      * Change RGB to Hex

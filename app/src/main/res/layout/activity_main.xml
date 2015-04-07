@@ -2,54 +2,47 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#FFCCCCCC"
+    android:background="@color/lightgray"
     android:orientation="vertical"
     tools:context=".MainActivity">
 
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="50dp"
-        android:layout_gravity="center"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:gravity="center"
         android:orientation="horizontal">
 
-        <ImageButton
-            android:id="@+id/new_btn"
+        <Button
+            android:id="@+id/new_button"
             android:layout_width="wrap_content"
-            android:layout_height="fill_parent"
-            android:contentDescription="@string/start_new"
-            android:src="@drawable/new_pic" />
+            android:layout_height="wrap_content"
+            android:text="@string/new_drawing" />
 
-        <ImageButton
-            android:id="@+id/draw_btn"
+        <Button
+            android:id="@+id/color_button"
             android:layout_width="wrap_content"
-            android:layout_height="fill_parent"
-            android:contentDescription="@string/color"
-            android:src="@drawable/color" />
+            android:layout_height="wrap_content"
+            android:text="@string/color" />
 
-        <ImageButton
-            android:id="@+id/erase_btn"
+        <Button
+            android:id="@+id/erase_button"
             android:layout_width="wrap_content"
-            android:layout_height="fill_parent"
-            android:contentDescription="@string/erase"
-            android:src="@drawable/eraser" />
+            android:layout_height="wrap_content"
+            android:text="@string/erase" />
 
-        <ImageButton
-            android:id="@+id/save_btn"
+        <Button
+            android:id="@+id/save_button"
             android:layout_width="wrap_content"
-            android:layout_height="fill_parent"
-            android:contentDescription="@string/save"
-            android:src="@drawable/save" />
+            android:layout_height="wrap_content"
+            android:text="@string/save" />
     </LinearLayout>
 
     <jyuan.com.drawing.DrawingView
         android:id="@+id/drawing"
-        android:layout_width="fill_parent"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginBottom="3dp"
-        android:layout_marginLeft="5dp"
-        android:layout_marginRight="5dp"
-        android:layout_marginTop="3dp"
+        android:layout_margin="5dp"
         android:layout_weight="1"
-        android:background="#FFFFFFFF" />
+        android:background="@color/white" />
 
 </LinearLayout>

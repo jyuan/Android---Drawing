@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
+import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -25,8 +26,6 @@ public class DrawingView extends View {
     //canvas bitmap
     private Bitmap bitmap;
 
-    private boolean erase = false;
-
     public DrawingView(Context context, AttributeSet attrs) {
         super(context, attrs);
         init();
@@ -43,6 +42,7 @@ public class DrawingView extends View {
         drawPaint.setColor(initialColor);
         drawPaint.setStrokeWidth(9);
 
+        // bit mask for the flag enabling dithering
         canvasPaint = new Paint(Paint.DITHER_FLAG);
     }
 
@@ -63,7 +63,7 @@ public class DrawingView extends View {
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    public boolean onTouchEvent(@NonNull MotionEvent event) {
         float touchX = event.getX();
         float touchY = event.getY();
 
@@ -100,8 +100,7 @@ public class DrawingView extends View {
     }
 
     public void eraseImage(boolean erase) {
-        this.erase =erase;
-        if (this.erase) {
+        if (erase) {
             drawPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
             Log.i("color", "erase model");
             drawPaint.setStrokeWidth(45);

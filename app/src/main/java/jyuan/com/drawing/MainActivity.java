@@ -5,25 +5,30 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
-import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
-import android.provider.MediaStore;
+import android.os.Environment;
 import android.util.Log;
 import android.view.View;
-import android.widget.ImageButton;
+import android.widget.Button;
+import android.widget.Toast;
 
 import com.dropbox.client2.DropboxAPI;
 import com.dropbox.client2.android.AndroidAuthSession;
 import com.dropbox.client2.session.AccessTokenPair;
 import com.dropbox.client2.session.AppKeyPair;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
-import java.util.UUID;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import jyuan.com.drawing.ColorPicker.ColorPickerDialog;
-import jyuan.com.drawing.ColorPicker.RGBToHex;
+import jyuan.com.drawing.util.ImageUtil;
 import jyuan.com.drawing.util.UploadPicture;
 
 
@@ -50,66 +55,41 @@ public class MainActivity extends Activity implements View.OnClickListener {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        drawView = (DrawingView) findViewById(R.id.drawing);
+
         dropboxInitial();
         buttonInitial();
     }
 
-    private void dropboxInitial() {
-        // We create a new AuthSession so that we can use the Dropbox API.
-        AndroidAuthSession session = buildSession();
-        mApi = new DropboxAPI<AndroidAuthSession>(session);
-
-        drawView = (DrawingView) findViewById(R.id.drawing);
-    }
-
     private void buttonInitial() {
-        ImageButton newButton, colorButton, eraseButton, saveButton;
         // create new
-        newButton = (ImageButton) findViewById(R.id.new_btn);
-        newButton.setOnClickListener(this);
+        Button newButton = (Button) findViewById(R.id.new_button);
         // color
-        colorButton = (ImageButton) findViewById(R.id.draw_btn);
-        colorButton.setOnClickListener(this);
+        Button colorButton = (Button) findViewById(R.id.color_button);
         // erase image
-        eraseButton = (ImageButton) findViewById(R.id.erase_btn);
-        eraseButton.setOnClickListener(this);
+        Button eraseButton = (Button) findViewById(R.id.erase_button);
         // save image
-        saveButton = (ImageButton) findViewById(R.id.save_btn);
+        Button saveButton = (Button) findViewById(R.id.save_button);
+
+        newButton.setOnClickListener(this);
+        colorButton.setOnClickListener(this);
+        eraseButton.setOnClickListener(this);
         saveButton.setOnClickListener(this);
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        AndroidAuthSession session = mApi.getSession();
-
-        if (session.authenticationSuccessful()) {
-            try {
-                // Mandatory call to complete the auth
-                session.finishAuthentication();
-
-                // Store it locally in our app for later use
-                storeAuth(session);
-                isLogin = true;
-            } catch (IllegalStateException e) {
-                Log.i("color", "Dropbox Error authenticating", e);
-            }
-        }
     }
 
     @Override
     public void onClick(View v) {
         switch (v.getId()) {
-            case R.id.new_btn:
+            case R.id.new_button:
                 createNewCanvas();
                 break;
-            case R.id.draw_btn:
+            case R.id.color_button:
                 changeColor();
                 break;
-            case R.id.erase_btn:
-                eraseBrush();
+            case R.id.erase_button:
+                erase();
                 break;
-            case R.id.save_btn:
+            case R.id.save_button:
                 saveImage();
                 break;
         }
@@ -141,29 +121,27 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private void changeColor() {
         drawView.eraseImage(false);
         int initialColor = drawView.getInitialColor();
-        Log.i("color", "initial color:" + String.valueOf(initialColor));
+        Log.i(getClass().getSimpleName(), "initial color:" + String.valueOf(initialColor));
 
         ColorPickerDialog colorPickerDialog = new ColorPickerDialog(this, initialColor,
                 new ColorPickerDialog.OnColorSelectedListener() {
 
-            @Override
-            public void onColorSelected(int color) {
-                Log.i("color", String.valueOf(color));
-                String hexColor = "#" + RGBToHex.getColorInHexFromRGB(Color.red(color),
-                        Color.green(color), Color.blue(color));
-                Log.i("color", "HEX Color" + hexColor);
-                drawView.setColor(hexColor);
-            }
+                    @Override
+                    public void onColorSelected(int color) {
+                        Log.i(getClass().getSimpleName(), String.valueOf(color));
+                        String hexColor = "#" + ImageUtil.getColorInHexFromRGB(Color.red(color),
+                                Color.green(color), Color.blue(color));
+                        Log.i(getClass().getSimpleName(), "HEX Color" + hexColor);
+                        drawView.setColor(hexColor);
+                    }
 
-        });
+                });
         colorPickerDialog.show();
     }
 
-    private void eraseBrush() {
+    private void erase() {
         AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(context);
-        // set title
         alertDialogBuilder.setTitle("Erase Draw");
-        // set dialog message
         alertDialogBuilder
                 .setMessage("Use your finger to erase some part you are not satisfied")
                 .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
@@ -201,31 +179,28 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         drawView.eraseImage(false);
 
                         drawView.setDrawingCacheEnabled(true);
-                        String imgSaved = MediaStore.Images.Media.insertImage(
-                                MainActivity.this.getContentResolver(),
-                                drawView.getDrawingCache(),
-                                UUID.randomUUID().toString() + ".png", "drawing");
-                        Log.i("color", imgSaved);
-                        String filePath = convertMediaUriToPath(Uri.parse(imgSaved));
-                        File file = new File(filePath);
-                        if (imgSaved != null) {
-                            UploadPicture upload = new UploadPicture(MainActivity.this,
+                        Bitmap bitmap = drawView.getDrawingCache();
+
+                        File file = generateImageFile();
+                        OutputStream outputStream;
+                        try {
+                            if (bitmap != null) {
+                                outputStream = new FileOutputStream(file);
+                                BufferedOutputStream bos = new BufferedOutputStream(outputStream);
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, bos);
+
+                                bos.flush();
+                                bos.close();
+                                UploadPicture upload = new UploadPicture(MainActivity.this,
                                     mApi, PHOTO_DIR, file);
-                            upload.execute();
+                                upload.execute();
+                            }
+                        } catch (IOException e) {
+                            Log.e(getClass().getSimpleName(), e.getMessage());
                         }
                         drawView.destroyDrawingCache();
 
                         dialog.dismiss();
-                    }
-
-                    protected String convertMediaUriToPath(Uri uri) {
-                        String[] proj = {MediaStore.Images.Media.DATA};
-                        Cursor cursor = getContentResolver().query(uri, proj, null, null, null);
-                        int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-                        cursor.moveToFirst();
-                        String path = cursor.getString(column_index);
-                        cursor.close();
-                        return path;
                     }
                 })
                 .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -235,6 +210,42 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 });
         AlertDialog alertDialog = alertDialogBuilder.create();
         alertDialog.show();
+    }
+
+    public String generateImageFileName() {
+        String timeStamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
+        return "DRAWING_" + timeStamp + ".png";
+    }
+
+    public File generateImageFile() {
+        String imageFileName = generateImageFileName();
+        File storageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        return new File(storageDir, imageFileName);
+    }
+
+    private void dropboxInitial() {
+        // We create a new AuthSession so that we can use the Dropbox API.
+        AndroidAuthSession session = buildSession();
+        mApi = new DropboxAPI<>(session);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        AndroidAuthSession session = mApi.getSession();
+
+        if (session.authenticationSuccessful()) {
+            try {
+                // Mandatory call to complete the auth
+                session.finishAuthentication();
+
+                // Store it locally in our app for later use
+                storeAuth(session);
+                isLogin = true;
+            } catch (IllegalStateException e) {
+                Log.i(getClass().getSimpleName(), "Dropbox Error authenticating", e);
+            }
+        }
     }
 
     private AndroidAuthSession buildSession() {
@@ -283,4 +294,6 @@ public class MainActivity extends Activity implements View.OnClickListener {
             return;
         }
     }
+
+
 }
