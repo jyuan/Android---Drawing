@@ -20,7 +20,7 @@ public class DrawingView extends View {
     //drawing and canvas paint
     private Paint drawPaint, canvasPaint;
     //initial color
-    private int initialColor = 0xFF660000;
+    private int currentColor = 0xFF660000;
     //canvas
     private Canvas canvas;
     //canvas bitmap
@@ -28,22 +28,21 @@ public class DrawingView extends View {
 
     public DrawingView(Context context, AttributeSet attrs) {
         super(context, attrs);
+
+        path = new Path();
+        drawPaint = new Paint();
+        canvasPaint = new Paint();
+
         init();
     }
 
     private void init() {
-        path = new Path();
-        drawPaint = new Paint();
-
         drawPaint.setAntiAlias(true);
         drawPaint.setStyle(Paint.Style.STROKE);
         drawPaint.setStrokeJoin(Paint.Join.ROUND);
         drawPaint.setStrokeCap(Paint.Cap.ROUND);
-        drawPaint.setColor(initialColor);
+        drawPaint.setColor(currentColor);
         drawPaint.setStrokeWidth(9);
-
-        // bit mask for the flag enabling dithering
-        canvasPaint = new Paint(Paint.DITHER_FLAG);
     }
 
     @Override
@@ -64,15 +63,12 @@ public class DrawingView extends View {
 
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
-        float touchX = event.getX();
-        float touchY = event.getY();
-
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                path.moveTo(touchX, touchY);
+                path.moveTo(event.getX(), event.getY());
                 break;
             case MotionEvent.ACTION_MOVE:
-                path.lineTo(touchX, touchY);
+                path.lineTo(event.getX(), event.getY());
                 break;
             case MotionEvent.ACTION_UP:
                 canvas.drawPath(path, drawPaint);
@@ -81,38 +77,50 @@ public class DrawingView extends View {
             default:
                 return false;
         }
-
         invalidate();
         return true;
     }
 
-    public void setColor(String newColor) {
-        //set color
+    /**
+     * change current color to the new selected color
+     * @param newColor selected color
+     */
+    public void setCurrentColor(int newColor) {
+        currentColor = newColor;
+        drawPaint.setColor(currentColor);
         invalidate();
-
-        initialColor = Color.parseColor(newColor);
-        drawPaint.setColor(initialColor);
     }
 
-    public void startNew() {
+    /**
+     * get current color
+     * @return current color
+     */
+    public int getCurrentColor() {
+        return currentColor;
+    }
+
+    /**
+     * start a new canvas
+     */
+    public void createNewDrawing() {
         canvas.drawColor(0, PorterDuff.Mode.CLEAR);
         invalidate();
     }
 
+    /**
+     * erase part of image
+     * @param erase true if it in the erase module
+     */
     public void eraseImage(boolean erase) {
         if (erase) {
             drawPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
-            Log.i("color", "erase model");
+            Log.i(getClass().getSimpleName(), "erase model");
             drawPaint.setStrokeWidth(45);
         } else {
             drawPaint.setXfermode(null);
-            Log.i("color", "change to non-erase model");
+            Log.i(getClass().getSimpleName(), "change to non-erase model");
             drawPaint.setStrokeWidth(10);
-            drawPaint.setColor(initialColor);
+            drawPaint.setColor(currentColor);
         }
-    }
-
-    public int getInitialColor() {
-        return initialColor;
     }
 }

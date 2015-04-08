@@ -6,20 +6,16 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Environment;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.Toast;
 
 import com.dropbox.client2.DropboxAPI;
 import com.dropbox.client2.android.AndroidAuthSession;
-import com.dropbox.client2.session.AccessTokenPair;
 import com.dropbox.client2.session.AppKeyPair;
 
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -28,7 +24,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import jyuan.com.drawing.ColorPicker.ColorPickerDialog;
-import jyuan.com.drawing.util.ImageUtil;
 import jyuan.com.drawing.util.UploadPicture;
 
 
@@ -40,12 +35,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
     final static private String APP_KEY = "5n0xvg2d0q8p7xz";
     final static private String APP_SECRET = "7jk1u8lnys3ucct";
 
-    private static final String ACCOUNT_PREFS_NAME = "prefs";
-    private static final String ACCESS_KEY_NAME = "ACCESS_KEY";
-    private static final String ACCESS_SECRET_NAME = "ACCESS_SECRET";
-    private static final String PHOTO_DIR = "/Photos/";
+    private static final String DROPBOX = "dropbox";
+    private static final String OAUTH = "OAuth";
+    private static final String PHOTOS = "/Photos/";
 
-    DropboxAPI<AndroidAuthSession> mApi;
+    DropboxAPI<AndroidAuthSession> dropboxAPI;
 
     // whether the user has log in with Dropbox
     private boolean isLogin;
@@ -105,7 +99,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         drawView.eraseImage(false);
-                        drawView.startNew();
+                        drawView.createNewDrawing();
                         dialog.dismiss();
                     }
                 })
@@ -120,7 +114,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
     private void changeColor() {
         drawView.eraseImage(false);
-        int initialColor = drawView.getInitialColor();
+        int initialColor = drawView.getCurrentColor();
         Log.i(getClass().getSimpleName(), "initial color:" + String.valueOf(initialColor));
 
         ColorPickerDialog colorPickerDialog = new ColorPickerDialog(this, initialColor,
@@ -128,11 +122,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
                     @Override
                     public void onColorSelected(int color) {
-                        Log.i(getClass().getSimpleName(), String.valueOf(color));
-                        String hexColor = "#" + ImageUtil.getColorInHexFromRGB(Color.red(color),
-                                Color.green(color), Color.blue(color));
-                        Log.i(getClass().getSimpleName(), "HEX Color" + hexColor);
-                        drawView.setColor(hexColor);
+                        Log.i(getClass().getSimpleName(), "changed color:" + String.valueOf(color));
+                        drawView.setCurrentColor(color);
                     }
 
                 });
@@ -161,7 +152,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
     private void saveImage() {
         if (!isLogin) {
-            mApi.getSession().startOAuth2Authentication(MainActivity.this);
+            dropboxAPI.getSession().startOAuth2Authentication(MainActivity.this);
         } else {
             uploadImage();
         }
@@ -186,14 +177,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         try {
                             if (bitmap != null) {
                                 outputStream = new FileOutputStream(file);
-                                BufferedOutputStream bos = new BufferedOutputStream(outputStream);
-                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, bos);
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream);
 
-                                bos.flush();
-                                bos.close();
-                                UploadPicture upload = new UploadPicture(MainActivity.this,
-                                    mApi, PHOTO_DIR, file);
-                                upload.execute();
+                                outputStream.flush();
+                                outputStream.close();
+                                uploadImageIntoDropbox(file);
                             }
                         } catch (IOException e) {
                             Log.e(getClass().getSimpleName(), e.getMessage());
@@ -212,35 +200,50 @@ public class MainActivity extends Activity implements View.OnClickListener {
         alertDialog.show();
     }
 
+    /**
+     * generate the file name of image
+     *
+     * @return file name
+     */
     public String generateImageFileName() {
         String timeStamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
         return "DRAWING_" + timeStamp + ".png";
     }
 
+    /**
+     * create a image file
+     *
+     * @return file
+     */
     public File generateImageFile() {
         String imageFileName = generateImageFileName();
         File storageDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
         return new File(storageDir, imageFileName);
     }
 
+    public void uploadImageIntoDropbox(File file) {
+        UploadPicture upload = new UploadPicture(MainActivity.this, dropboxAPI, PHOTOS, file);
+        upload.execute();
+    }
+
     private void dropboxInitial() {
         // We create a new AuthSession so that we can use the Dropbox API.
-        AndroidAuthSession session = buildSession();
-        mApi = new DropboxAPI<>(session);
+        AppKeyPair appKeyPair = new AppKeyPair(APP_KEY, APP_SECRET);
+        AndroidAuthSession session = new AndroidAuthSession(appKeyPair);
+        loadAuth(session);
+        dropboxAPI = new DropboxAPI<>(session);
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        AndroidAuthSession session = mApi.getSession();
-
-        if (session.authenticationSuccessful()) {
+        if (dropboxAPI.getSession().authenticationSuccessful()) {
             try {
-                // Mandatory call to complete the auth
-                session.finishAuthentication();
+                // Required to complete auth, sets the access token on the session
+                dropboxAPI.getSession().finishAuthentication();
 
                 // Store it locally in our app for later use
-                storeAuth(session);
+                storeAuth(dropboxAPI.getSession());
                 isLogin = true;
             } catch (IllegalStateException e) {
                 Log.i(getClass().getSimpleName(), "Dropbox Error authenticating", e);
@@ -248,52 +251,23 @@ public class MainActivity extends Activity implements View.OnClickListener {
         }
     }
 
-    private AndroidAuthSession buildSession() {
-        AppKeyPair appKeyPair = new AppKeyPair(APP_KEY, APP_SECRET);
-
-        AndroidAuthSession session = new AndroidAuthSession(appKeyPair);
-        loadAuth(session);
-        return session;
-    }
-
     private void loadAuth(AndroidAuthSession session) {
-        SharedPreferences prefs = getSharedPreferences(ACCOUNT_PREFS_NAME, 0);
-        String key = prefs.getString(ACCESS_KEY_NAME, null);
-        String secret = prefs.getString(ACCESS_SECRET_NAME, null);
-        if (key == null || secret == null || key.length() == 0 || secret.length() == 0) return;
-
-        if (key.equals("oauth2:")) {
-            // If the key is set to "oauth2:", then we can assume the token is for OAuth 2.
-            session.setOAuth2AccessToken(secret);
-        } else {
-            // Still support using old OAuth 1 tokens.
-            session.setAccessTokenPair(new AccessTokenPair(key, secret));
+        SharedPreferences prefs = getSharedPreferences(DROPBOX, 0);
+        String oAuth = prefs.getString(OAUTH, null);
+        if (oAuth == null || oAuth.length() == 0) {
+            return;
         }
+        session.setOAuth2AccessToken(oAuth);
+        isLogin = true;
     }
 
     private void storeAuth(AndroidAuthSession session) {
-        // Store the OAuth 2 access token, if there is one.
         String oauth2AccessToken = session.getOAuth2AccessToken();
         if (oauth2AccessToken != null) {
-            SharedPreferences prefs = getSharedPreferences(ACCOUNT_PREFS_NAME, 0);
+            SharedPreferences prefs = getSharedPreferences(DROPBOX, 0);
             SharedPreferences.Editor edit = prefs.edit();
-            edit.putString(ACCESS_KEY_NAME, "oauth2:");
-            edit.putString(ACCESS_SECRET_NAME, oauth2AccessToken);
+            edit.putString(OAUTH, oauth2AccessToken);
             edit.apply();
-            return;
-        }
-        // Store the OAuth 1 access token, if there is one.  This is only necessary if
-        // you're still using OAuth 1.
-        AccessTokenPair oauth1AccessToken = session.getAccessTokenPair();
-        if (oauth1AccessToken != null) {
-            SharedPreferences prefs = getSharedPreferences(ACCOUNT_PREFS_NAME, 0);
-            SharedPreferences.Editor edit = prefs.edit();
-            edit.putString(ACCESS_KEY_NAME, oauth1AccessToken.key);
-            edit.putString(ACCESS_SECRET_NAME, oauth1AccessToken.secret);
-            edit.apply();
-            return;
         }
     }
-
-
 }
